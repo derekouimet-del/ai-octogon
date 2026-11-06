@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "DYAD",
+      "hasCanvas": false,
+      "bodyTextLen": 874,
+      "bodyTextHash": "6b1a591022a24bc4ad2a284924929b420b491679f384538e3f251d03b98155c4",
+      "bodyTextPrefix": "DYAD Two minds. One floor. Floor Models Cast Stage Memory Librar",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "DYAD",
+      "hasCanvas": false,
+      "bodyTextLen": 789,
+      "bodyTextHash": "ad8801c411d006d6ec59936436c49b5c99a050d2055ce0f30af3123112034b0a",
+      "bodyTextPrefix": "DYAD Floor Models Cast Stage Memory Library Settings AGENT ARENA",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

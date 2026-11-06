@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #07080c;
+  --color-panel: #10131a;
+  --color-panel-2: #181d27;
+  --color-line: #2c3342;
+  --color-fg: #ebe7dc;
+  --color-muted: #93988f;
+  --color-lime: #d6ff3e;
+  --color-lime-ink: #152000;
+  --color-tide: #3ddec4;
+  --color-tide-ink: #04221c;
+  --color-ember: #ff5d3a;
+  --color-ember-ink: #2a0c06;
+  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --radius-xl: 1.25rem;
+  --radius-lg: 0.875rem;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--color-lime);
+    color: var(--color-lime-ink);
+  }
+
+  input[type="range"] {
+    accent-color: var(--color-lime);
+  }
+}
+
+@utility ring-hairline {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-fg) 10%, transparent);
+}
+
+.floor-wash {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-line) 80%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-line) 80%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at 50% 20%, #000 15%, transparent 72%);
+}
+
+.caret::after {
+  content: "";
+  display: inline-block;
+  width: 0.45rem;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-lime);
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise-in {
+  animation: rise-in 420ms ease-out both;
+}
+
+.live-dot {
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-lime) 70%, transparent);
+  animation: ping-dot 1.8s ease-out infinite;
+}
+
+@keyframes ping-dot {
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-in,
+  .live-dot,
+  .caret::after {
+    animation: none;
+  }
+}
