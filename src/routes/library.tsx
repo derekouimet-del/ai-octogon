@@ -95,7 +95,16 @@ function Library() {
           <div className="mt-3 space-y-3">
             {groups.map((group) => (
               <Panel key={group.topic} className="p-4">
-                <p className="text-sm text-muted">{group.topic}</p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="text-sm text-muted">{group.topic}</p>
+                  <Link
+                    to="/compare"
+                    search={{ a: group.sessions[0]!.id, b: group.sessions[1]!.id }}
+                    className="inline-flex min-h-11 items-center text-sm text-lime"
+                  >
+                    Line them up
+                  </Link>
+                </div>
                 <ul className="mt-2 space-y-1 text-sm">
                   {group.sessions.map((session) => (
                     <li key={session.id}>

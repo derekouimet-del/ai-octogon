@@ -129,6 +129,9 @@ export type Session = {
   tokenBudget: number;
   tokensUsed: number;
   speedMs: number;
+  maxMinutes: number;
+  elapsedMs: number;
+  resumedAt: string | null;
   allowConclusion: boolean;
   isPublic: boolean;
   summary: string | null;
@@ -172,10 +175,33 @@ export type CreateSessionInput = {
   maxExchanges: number;
   tokenBudget: number;
   speedMs: number;
+  maxMinutes: number;
   allowConclusion: boolean;
   isPublic: boolean;
   design: StageDesign | null;
 };
+
+export type Setup = {
+  id: string;
+  name: string;
+  topic: string;
+  mode: Mode;
+  characterA: string;
+  characterB: string;
+  providerA: string;
+  providerB: string;
+  extraA: string;
+  extraB: string;
+  maxExchanges: number;
+  tokenBudget: number;
+  speedMs: number;
+  maxMinutes: number;
+  allowConclusion: boolean;
+  isPublic: boolean;
+  createdAt: string;
+};
+
+export type SetupDraft = Omit<Setup, "createdAt">;
 
 export type TurnResult = {
   stop: boolean;

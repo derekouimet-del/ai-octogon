@@ -45,6 +45,12 @@ function Floor() {
             >
               Meet the cast
             </Link>
+            <Link
+              to="/board"
+              className="inline-flex min-h-11 items-center rounded-lg border border-line bg-panel-2 px-4 py-2 text-sm text-fg"
+            >
+              Public board
+            </Link>
           </div>
         </div>
       </section>

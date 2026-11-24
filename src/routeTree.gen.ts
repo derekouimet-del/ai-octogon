@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BoardRouteImport } from './routes/board'
 import { Route as CharactersRouteImport } from './routes/characters'
+import { Route as CompareRouteImport } from './routes/compare'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as ProvidersRouteImport } from './routes/providers'
@@ -25,9 +27,19 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BoardRoute = BoardRouteImport.update({
+  id: '/board',
+  path: '/board',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CharactersRoute = CharactersRouteImport.update({
   id: '/characters',
   path: '/characters',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareRoute = CompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LibraryRoute = LibraryRouteImport.update({
@@ -73,7 +85,9 @@ const ApiArenaStreamRoute = ApiArenaStreamRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/board': typeof BoardRoute
   '/characters': typeof CharactersRoute
+  '/compare': typeof CompareRoute
   '/library': typeof LibraryRoute
   '/memory': typeof MemoryRoute
   '/providers': typeof ProvidersRoute
@@ -85,7 +99,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/board': typeof BoardRoute
   '/characters': typeof CharactersRoute
+  '/compare': typeof CompareRoute
   '/library': typeof LibraryRoute
   '/memory': typeof MemoryRoute
   '/providers': typeof ProvidersRoute
@@ -98,7 +114,9 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/board': typeof BoardRoute
   '/characters': typeof CharactersRoute
+  '/compare': typeof CompareRoute
   '/library': typeof LibraryRoute
   '/memory': typeof MemoryRoute
   '/providers': typeof ProvidersRoute
@@ -112,7 +130,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/board'
     | '/characters'
+    | '/compare'
     | '/library'
     | '/memory'
     | '/providers'
@@ -124,7 +144,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/board'
     | '/characters'
+    | '/compare'
     | '/library'
     | '/memory'
     | '/providers'
@@ -136,7 +158,9 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/board'
     | '/characters'
+    | '/compare'
     | '/library'
     | '/memory'
     | '/providers'
@@ -149,7 +173,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BoardRoute: typeof BoardRoute
   CharactersRoute: typeof CharactersRoute
+  CompareRoute: typeof CompareRoute
   LibraryRoute: typeof LibraryRoute
   MemoryRoute: typeof MemoryRoute
   ProvidersRoute: typeof ProvidersRoute
@@ -169,11 +195,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/board': {
+      id: '/board'
+      path: '/board'
+      fullPath: '/board'
+      preLoaderRoute: typeof BoardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/characters': {
       id: '/characters'
       path: '/characters'
       fullPath: '/characters'
       preLoaderRoute: typeof CharactersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compare': {
+      id: '/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof CompareRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library': {
@@ -237,7 +277,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BoardRoute: BoardRoute,
   CharactersRoute: CharactersRoute,
+  CompareRoute: CompareRoute,
   LibraryRoute: LibraryRoute,
   MemoryRoute: MemoryRoute,
   ProvidersRoute: ProvidersRoute,

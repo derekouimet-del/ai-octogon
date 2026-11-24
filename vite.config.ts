@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
@@ -175,6 +175,20 @@ export default defineConfig(({ command, isPreview }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            hooks: {
+              async compiled(nitro) {
+                // PGLite loads this beside the bundled module via import.meta.url.
+                // Nitro doesn't trace the relative URL, so the production server
+                // crashes on the embedded-database fallback without the copy.
+                const srcDir = join(process.cwd(), "node_modules/@electric-sql/pglite/dist");
+                const destDir = join(nitro.options.output.serverDir, "_libs");
+                mkdirSync(destDir, { recursive: true });
+                for (const name of ["pglite.data", "pglite.wasm", "initdb.wasm"]) {
+                  const src = join(srcDir, name);
+                  if (existsSync(src)) copyFileSync(src, join(destDir, name));
+                }
+              },
+            },
           }),
         ]
       : []),

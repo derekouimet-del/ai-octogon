@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { HOUSE_ID, MODE_META, TOPIC_PRESETS } from "@/lib/arena/cast";
-import { createSessionFn, getSetupData, paintBackdropFn, stageShowdownFn } from "@/lib/arena/functions";
+import { createSessionFn, deleteSetupFn, getSetupData, paintBackdropFn, saveSetupFn, stageShowdownFn } from "@/lib/arena/functions";
 import { toSnapshot } from "@/lib/arena/snapshot";
 import type { Mode, StageDesign } from "@/lib/arena/types";
 import { MODES } from "@/lib/arena/types";
@@ -15,14 +15,13 @@ export const Route = createFileRoute("/setup")({
 });
 
 function Stage() {
-  const { characters, providers } = Route.useLoaderData();
+  const { characters, providers, setups: saved } = Route.useLoaderData();
   const navigate = useNavigate();
   const hydrated = useHydrated();
-  const defaults = useVault((s) => ({
-    exchanges: s.defaultExchanges,
-    budget: s.defaultBudget,
-    speed: s.defaultSpeed,
-  }));
+  const defaultExchanges = useVault((s) => s.defaultExchanges);
+  const defaultBudget = useVault((s) => s.defaultBudget);
+  const defaultSpeed = useVault((s) => s.defaultSpeed);
+  const defaultMinutes = useVault((s) => s.defaultMinutes);
   const keys = useVault((s) => s.keys);
   const house = providers.find((p) => p.id === HOUSE_ID) ?? providers[0];
   const a0 = characters.find((c) => c.id === "char_vesper") ?? characters[0];
@@ -36,12 +35,16 @@ function Stage() {
   const [provB, setProvB] = useState(house?.id ?? "");
   const [extraA, setExtraA] = useState("");
   const [extraB, setExtraB] = useState("");
-  const [maxExchanges, setMaxExchanges] = useState(defaults.exchanges);
-  const [tokenBudget, setTokenBudget] = useState(defaults.budget);
-  const [speedMs, setSpeedMs] = useState(defaults.speed);
+  const [maxExchanges, setMaxExchanges] = useState(defaultExchanges);
+  const [tokenBudget, setTokenBudget] = useState(defaultBudget);
+  const [speedMs, setSpeedMs] = useState(defaultSpeed);
+  const [maxMinutes, setMaxMinutes] = useState(defaultMinutes);
   const [allowConclusion, setAllowConclusion] = useState(true);
   const [isPublic, setIsPublic] = useState(true);
   const [design, setDesign] = useState<StageDesign | null>(null);
+  const [setups, setSetups] = useState(saved);
+  const [cardId, setCardId] = useState("");
+  const [cardName, setCardName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const characterA = characters.find((c) => c.id === charA);
@@ -115,6 +118,7 @@ function Stage() {
           maxExchanges,
           tokenBudget,
           speedMs,
+          maxMinutes,
           allowConclusion,
           isPublic,
           design,
@@ -127,6 +131,67 @@ function Stage() {
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not open the floor");
+      setBusy(null);
+    }
+  }
+
+  function applyCard(id: string) {
+    const card = setups.find((item) => item.id === id);
+    if (!card) return;
+    setCardId(card.id);
+    setCardName(card.name);
+    setMode(card.mode);
+    setTopic(card.topic);
+    setCharA(card.characterA);
+    setCharB(card.characterB);
+    setProvA(card.providerA);
+    setProvB(card.providerB);
+    setExtraA(card.extraA);
+    setExtraB(card.extraB);
+    setMaxExchanges(card.maxExchanges);
+    setTokenBudget(card.tokenBudget);
+    setSpeedMs(card.speedMs);
+    setMaxMinutes(card.maxMinutes);
+    setAllowConclusion(card.allowConclusion);
+    setIsPublic(card.isPublic);
+    setDesign(null);
+  }
+
+  async function keepCard() {
+    const name = cardName.trim() || design?.title || topic.slice(0, 48);
+    if (!name.trim()) {
+      toast.error("Name the card, or write a topic first.");
+      return;
+    }
+    setBusy("card");
+    try {
+      const savedCard = await saveSetupFn({
+        data: {
+          id: cardId || crypto.randomUUID(),
+          name,
+          topic,
+          mode,
+          characterA: charA,
+          characterB: charB,
+          providerA: provA,
+          providerB: provB,
+          extraA,
+          extraB,
+          maxExchanges,
+          tokenBudget,
+          speedMs,
+          maxMinutes,
+          allowConclusion,
+          isPublic,
+        },
+      });
+      setCardId(savedCard.id);
+      setCardName(savedCard.name);
+      setSetups((prev) => [savedCard, ...prev.filter((item) => item.id !== savedCard.id)]);
+      toast.success("Stage card saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the card");
+    } finally {
       setBusy(null);
     }
   }
@@ -205,6 +270,9 @@ function Stage() {
         <Field label="Pause between turns (ms)">
           <TextInput type="number" min={0} step={100} value={speedMs} onChange={(e) => setSpeedMs(Number(e.target.value))} />
         </Field>
+        <Field label="Clock (minutes)" hint="0 runs until the exchange or token cap. Pause freezes the clock.">
+          <TextInput type="number" min={0} max={180} value={maxMinutes} onChange={(e) => setMaxMinutes(Number(e.target.value))} />
+        </Field>
         <div className="flex flex-col justify-end gap-3 text-sm">
           <label className="flex min-h-11 items-center gap-2">
             <input type="checkbox" checked={allowConclusion} onChange={(e) => setAllowConclusion(e.target.checked)} />
@@ -256,6 +324,50 @@ function Stage() {
       </Panel>
 
       {keyNote ? <p className="text-sm text-ember">{keyNote}</p> : null}
+
+      <Panel className="space-y-4 p-5">
+        <div>
+          <h2 className="font-display text-2xl font-bold">Stage cards</h2>
+          <p className="text-sm text-muted">Save this pairing and open it again without rebuilding the floor.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <Field label="Card name">
+            <TextInput value={cardName} onChange={(e) => setCardName(e.target.value)} placeholder="Mars, nationalist vs academic" />
+          </Field>
+          <Field label="Saved cards">
+            <SelectInput value={cardId} onChange={(e) => applyCard(e.target.value)}>
+              <option value="">Load a card</option>
+              {setups.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <div className="flex items-end gap-2">
+            <Button disabled={busy !== null} onClick={() => void keepCard()}>
+              {busy === "card" ? "Saving…" : cardId ? "Update card" : "Save card"}
+            </Button>
+            {cardId ? (
+              <Button
+                tone="danger"
+                disabled={busy !== null}
+                onClick={() => {
+                  void deleteSetupFn({ data: { id: cardId } })
+                    .then(() => {
+                      setSetups((prev) => prev.filter((item) => item.id !== cardId));
+                      setCardId("");
+                      toast.success("Card removed");
+                    })
+                    .catch((err) => toast.error(err instanceof Error ? err.message : "Could not remove the card"));
+                }}
+              >
+                Remove
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Panel>
 
       <Button tone="lime" disabled={busy !== null} onClick={() => void launch()} className="px-6">
         {busy === "launch" ? "Opening…" : "Open the floor"}

@@ -14,6 +14,8 @@ import type {
   ProviderKind,
   Session,
   SessionStatus,
+  Setup,
+  SetupDraft,
   Speaker,
   StageDesign,
   TurnMessage,
@@ -132,6 +134,9 @@ function mapSession(row: Row): Session {
     tokenBudget: num(row.token_budget, 12000),
     tokensUsed: num(row.tokens_used, 0),
     speedMs: num(row.speed_ms, 1200),
+    maxMinutes: num(row.max_minutes, 0),
+    elapsedMs: num(row.elapsed_ms, 0),
+    resumedAt: iso(row.resumed_at),
     allowConclusion: bool(row.allow_conclusion),
     isPublic: bool(row.is_public),
     summary: row.summary ? str(row.summary) : null,
@@ -431,7 +436,7 @@ export async function createSession(input: CreateSessionInput): Promise<Session>
   await sql`
     insert into sessions (
       id, title, topic, mode, status, agent_a, agent_b, max_exchanges, token_budget,
-      speed_ms, allow_conclusion, is_public, design, started_at
+      speed_ms, max_minutes, elapsed_ms, resumed_at, allow_conclusion, is_public, design, started_at
     ) values (
       ${id},
       ${title},
@@ -443,6 +448,9 @@ export async function createSession(input: CreateSessionInput): Promise<Session>
       ${clamp(Math.round(input.maxExchanges), 2, 24)},
       ${clamp(Math.round(input.tokenBudget), 500, 200000)},
       ${clamp(Math.round(input.speedMs), 0, 15000)},
+      ${clamp(Math.round(input.maxMinutes || 0), 0, 180)},
+      0,
+      now(),
       ${input.allowConclusion},
       ${input.isPublic},
       ${design ? JSON.stringify(design) : null},
@@ -465,6 +473,15 @@ export async function listSessions(): Promise<Session[]> {
   return rows.map(mapSession);
 }
 
+function accrued(session: { elapsedMs: number; resumedAt: string | null }): number {
+  const extra = session.resumedAt ? Math.max(0, Date.now() - new Date(session.resumedAt).getTime()) : 0;
+  return Math.round(session.elapsedMs + extra);
+}
+
+export function clockMs(session: { elapsedMs: number; resumedAt: string | null }): number {
+  return accrued(session);
+}
+
 export async function getSession(id: string): Promise<Session | null> {
   const sql = await getSql();
   const rows = await sql<Row>`select * from sessions where id = ${id}`;
@@ -473,11 +490,16 @@ export async function getSession(id: string): Promise<Session | null> {
   if (session.status === "thinking") {
     const age = Date.now() - new Date(session.updatedAt).getTime();
     if (age > 150_000) {
+      const elapsed = accrued(session);
       await sql`
-        update sessions set status = 'paused', updated_at = now()
+        update sessions set
+          status = 'paused',
+          elapsed_ms = ${elapsed},
+          resumed_at = null,
+          updated_at = now()
         where id = ${id} and status = 'thinking'
       `;
-      session = { ...session, status: "paused" };
+      session = { ...session, status: "paused", elapsedMs: elapsed, resumedAt: null };
     }
   }
   return session;
@@ -493,14 +515,27 @@ export async function getMessages(sessionId: string): Promise<TurnMessage[]> {
 
 export async function setStatus(id: string, status: SessionStatus): Promise<Session> {
   const sql = await getSql();
-  if (status === "completed" || status === "failed") {
+  if (status === "completed" || status === "failed" || status === "paused") {
+    const current = await getSession(id);
+    if (!current) throw new Error("Session not found.");
+    const ended = status !== "paused";
     await sql`
-      update sessions set status = ${status}, ended_at = coalesce(ended_at, now()), updated_at = now()
+      update sessions set
+        elapsed_ms = ${accrued(current)},
+        resumed_at = null,
+        status = ${status},
+        ended_at = case when ${ended} then coalesce(ended_at, now()) else ended_at end,
+        updated_at = now()
       where id = ${id}
     `;
   } else if (status === "live") {
     await sql`
-      update sessions set status = 'live', started_at = coalesce(started_at, now()), ended_at = null, updated_at = now()
+      update sessions set
+        status = 'live',
+        started_at = coalesce(started_at, now()),
+        resumed_at = coalesce(resumed_at, now()),
+        ended_at = null,
+        updated_at = now()
       where id = ${id} and status in ('paused', 'draft', 'live', 'failed')
     `;
   } else {
@@ -543,9 +578,17 @@ export async function claimTurn(sessionId: string): Promise<Session | null> {
 }
 
 export async function releaseTurn(sessionId: string, status: SessionStatus): Promise<void> {
+  const current = await getSession(sessionId);
+  if (!current || current.status !== "thinking") return;
   const sql = await getSql();
+  const ended = status === "completed" || status === "failed";
   await sql`
-    update sessions set status = ${status}, updated_at = now()
+    update sessions set
+      elapsed_ms = ${accrued(current)},
+      resumed_at = null,
+      status = ${status},
+      ended_at = case when ${ended} then coalesce(ended_at, now()) else ended_at end,
+      updated_at = now()
     where id = ${sessionId} and status = 'thinking'
   `;
 }
@@ -589,7 +632,15 @@ export async function commitTurn(input: {
     where id = ${input.sessionId}
     returning *
   `;
-  const session = mapSession(rows[0]!);
+  let session = mapSession(rows[0]!);
+  if (session.status !== "live" && session.resumedAt) {
+    const elapsed = clockMs(session);
+    await sql`
+      update sessions set elapsed_ms = ${elapsed}, resumed_at = null, updated_at = now()
+      where id = ${input.sessionId}
+    `;
+    session = { ...session, elapsedMs: elapsed, resumedAt: null };
+  }
   const actuallyStop = session.status !== "live";
   return { message, session, stop: actuallyStop, reason: actuallyStop ? reason ?? session.status : null };
 }
@@ -656,4 +707,125 @@ export async function restoreTemplates(): Promise<Character[]> {
     if (!existing.length) await insertCharacter({ ...preset, template: true, favorite: Boolean(preset.favorite) });
   }
   return listCharacters();
+}
+
+export async function listBoard(): Promise<Session[]> {
+  await ensureSeed();
+  const sql = await getSql();
+  const rows = await sql<Row>`
+    select * from sessions where is_public = true order by created_at desc limit 80
+  `;
+  const rank = (status: SessionStatus) =>
+    status === "live" || status === "thinking" ? 0 : status === "paused" ? 1 : 2;
+  return rows
+    .map(mapSession)
+    .sort((a, b) => rank(a.status) - rank(b.status) || b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function rematchSession(id: string): Promise<Session> {
+  const session = await getSession(id);
+  if (!session) throw new Error("That session is not on the floor.");
+  return createSession({
+    topic: session.topic,
+    mode: session.mode,
+    title: session.design?.title || session.title,
+    agentA: session.agentA,
+    agentB: session.agentB,
+    maxExchanges: session.maxExchanges,
+    tokenBudget: session.tokenBudget,
+    speedMs: session.speedMs,
+    maxMinutes: session.maxMinutes,
+    allowConclusion: session.allowConclusion,
+    isPublic: session.isPublic,
+    design: session.design,
+  });
+}
+
+export async function closeForClock(sessionId: string): Promise<{ session: Session | null; message: TurnMessage }> {
+  const message = await addMessage(sessionId, "system", "The clock ran out. The floor is closed.", 0);
+  await releaseTurn(sessionId, "completed");
+  return { session: await getSession(sessionId), message };
+}
+
+function mapSetup(row: Row): Setup {
+  return {
+    id: str(row.id),
+    name: str(row.name),
+    topic: str(row.topic),
+    mode: asMode(str(row.mode)),
+    characterA: str(row.character_a),
+    characterB: str(row.character_b),
+    providerA: str(row.provider_a),
+    providerB: str(row.provider_b),
+    extraA: str(row.extra_a),
+    extraB: str(row.extra_b),
+    maxExchanges: num(row.max_exchanges, 8),
+    tokenBudget: num(row.token_budget, 12000),
+    speedMs: num(row.speed_ms, 900),
+    maxMinutes: num(row.max_minutes, 0),
+    allowConclusion: bool(row.allow_conclusion),
+    isPublic: bool(row.is_public),
+    createdAt: iso(row.created_at) ?? new Date().toISOString(),
+  };
+}
+
+export async function listSetups(): Promise<Setup[]> {
+  const sql = await getSql();
+  const rows = await sql<Row>`select * from setups order by created_at desc limit 40`;
+  return rows.map(mapSetup);
+}
+
+export async function saveSetup(input: SetupDraft): Promise<Setup> {
+  const sql = await getSql();
+  const name = input.name.trim().slice(0, 80);
+  if (!name) throw new Error("Name the card before saving it.");
+  if (!input.topic.trim()) throw new Error("A card needs a topic.");
+  const id = input.id || nid();
+  await sql`
+    insert into setups (
+      id, name, topic, mode, character_a, character_b, provider_a, provider_b,
+      extra_a, extra_b, max_exchanges, token_budget, speed_ms, max_minutes,
+      allow_conclusion, is_public
+    ) values (
+      ${id},
+      ${name},
+      ${input.topic.trim().slice(0, 2000)},
+      ${input.mode},
+      ${input.characterA},
+      ${input.characterB},
+      ${input.providerA},
+      ${input.providerB},
+      ${input.extraA.slice(0, 2000)},
+      ${input.extraB.slice(0, 2000)},
+      ${clamp(Math.round(input.maxExchanges), 2, 24)},
+      ${clamp(Math.round(input.tokenBudget), 500, 200000)},
+      ${clamp(Math.round(input.speedMs), 0, 15000)},
+      ${clamp(Math.round(input.maxMinutes || 0), 0, 180)},
+      ${input.allowConclusion},
+      ${input.isPublic}
+    )
+    on conflict (id) do update set
+      name = excluded.name,
+      topic = excluded.topic,
+      mode = excluded.mode,
+      character_a = excluded.character_a,
+      character_b = excluded.character_b,
+      provider_a = excluded.provider_a,
+      provider_b = excluded.provider_b,
+      extra_a = excluded.extra_a,
+      extra_b = excluded.extra_b,
+      max_exchanges = excluded.max_exchanges,
+      token_budget = excluded.token_budget,
+      speed_ms = excluded.speed_ms,
+      max_minutes = excluded.max_minutes,
+      allow_conclusion = excluded.allow_conclusion,
+      is_public = excluded.is_public
+  `;
+  const rows = await sql<Row>`select * from setups where id = ${id}`;
+  return mapSetup(rows[0]!);
+}
+
+export async function deleteSetup(id: string): Promise<void> {
+  const sql = await getSql();
+  await sql`delete from setups where id = ${id}`;
 }

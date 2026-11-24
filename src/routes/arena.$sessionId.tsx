@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Download, Pause, Play, Square, Volume2 } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Download, Pause, Play, RotateCcw, Square, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { playSpeech, streamTurn } from "@/lib/arena/client-stream";
@@ -8,6 +8,7 @@ import {
   distillFn,
   getSessionBundle,
   interveneFn,
+  rematchFn,
   setStatusFn,
 } from "@/lib/arena/functions";
 import { MODE_META } from "@/lib/arena/cast";
@@ -28,6 +29,7 @@ export const Route = createFileRoute("/arena/$sessionId")({
 function Arena() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
+  const navigate = useNavigate();
   const [session, setSession] = useState(data.session);
   const [messages, setMessages] = useState(data.messages);
   const [draft, setDraft] = useState<{ speaker: "a" | "b"; text: string } | null>(null);
@@ -70,6 +72,35 @@ function Arena() {
     // The loop closes over stable refs. Boot once per page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.autostart]);
+
+  useEffect(() => {
+    const watching = session.status === "live" || session.status === "thinking";
+    if (!watching || running) return;
+    let cancel = false;
+    const pull = async () => {
+      try {
+        const fresh = await getSessionBundle({ data: { id: session.id } });
+        if (cancel || runRef.current) return;
+        setSession((prev) => (prev.updatedAt === fresh.session.updatedAt && prev.status === fresh.session.status ? prev : fresh.session));
+        setMessages((prev) => {
+          if (
+            prev.length === fresh.messages.length &&
+            prev.every((message, index) => message.id === fresh.messages[index]?.id)
+          ) {
+            return prev;
+          }
+          return fresh.messages;
+        });
+      } catch {
+        // A spectator miss is not a floor failure. The next tick retries.
+      }
+    };
+    const timer = window.setInterval(() => void pull(), 2500);
+    return () => {
+      cancel = true;
+      window.clearInterval(timer);
+    };
+  }, [running, session.id, session.status]);
 
   async function runLoop() {
     runRef.current?.abort();
@@ -120,7 +151,10 @@ function Arena() {
         await wait(outcome.session?.speedMs ?? current.speedMs, controller.signal);
       }
     } finally {
-      if (runRef.current === controller) setRunning(false);
+      if (runRef.current === controller) {
+        runRef.current = null;
+        setRunning(false);
+      }
     }
   }
 
@@ -157,7 +191,24 @@ function Arena() {
     }
   }
 
-  const elapsed = clock(session.startedAt, session.endedAt, now);
+  async function again() {
+    setBusy("again");
+    try {
+      const next = await rematchFn({ data: { id: session.id } });
+      await navigate({
+        to: "/arena/$sessionId",
+        params: { sessionId: next.id },
+        search: { autostart: true, play: false },
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not run it again");
+      setBusy(null);
+    }
+  }
+
+  const spent = activeMs(session, now, running);
+  const clockLabel =
+    session.maxMinutes > 0 ? `${formatClock(spent)} / ${formatClock(session.maxMinutes * 60_000)}` : formatClock(spent);
   const live = session.status === "live" || session.status === "thinking" || running;
 
   return (
@@ -178,7 +229,7 @@ function Arena() {
           <p className="mt-1 max-w-2xl text-sm text-muted">{session.topic}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="px-2 font-display text-lg tabular-nums text-lime">{elapsed}</span>
+          <span className="px-2 font-display text-lg tabular-nums text-lime">{clockLabel}</span>
           {session.status === "paused" || session.status === "failed" ? (
             <Button tone="lime" onClick={() => void resume()}>
               <Play className="size-4" /> Resume
@@ -192,6 +243,11 @@ function Arena() {
           {session.status !== "completed" ? (
             <Button tone="danger" onClick={() => void stop()}>
               <Square className="size-4" /> End
+            </Button>
+          ) : null}
+          {session.status === "completed" || session.status === "paused" || session.status === "failed" ? (
+            <Button disabled={busy !== null || running} onClick={() => void again()}>
+              <RotateCcw className="size-4" /> {busy === "again" ? "Opening…" : "Run again"}
             </Button>
           ) : null}
           <Button onClick={() => download(session, messages)}>
@@ -210,7 +266,7 @@ function Arena() {
       {session.design?.stakes ? <p className="text-sm text-lime">{session.design.stakes}</p> : null}
 
       <div className="grid items-start gap-4 lg:grid-cols-[240px_1fr_240px]">
-        <Dossier agent={session.agentA} tone="tide" entrance={session.design?.aEntrance} />
+        <Dossier agent={session.agentA} tone="tide" entrance={session.design?.aEntrance} speaking={draft?.speaker === "a"} />
         <Panel className="flex min-h-[60vh] flex-col">
           <div className="flex items-center justify-between border-b border-line px-4 py-3 text-xs text-muted">
             <span className="tabular-nums">
@@ -271,7 +327,7 @@ function Arena() {
             </div>
           </div>
         </Panel>
-        <Dossier agent={session.agentB} tone="ember" entrance={session.design?.bEntrance} />
+        <Dossier agent={session.agentB} tone="ember" entrance={session.design?.bEntrance} speaking={draft?.speaker === "b"} />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -325,13 +381,15 @@ function Dossier({
   agent,
   tone,
   entrance,
+  speaking,
 }: {
   agent: Session["agentA"];
   tone: "tide" | "ember";
   entrance?: string;
+  speaking: boolean;
 }) {
   return (
-    <Panel className="p-4 lg:sticky lg:top-6">
+    <Panel className={`p-4 lg:sticky lg:top-6 ${speaking ? "outline outline-2 outline-lime" : ""}`}>
       <div className={`mb-3 h-1 rounded-full ${tone === "tide" ? "bg-tide" : "bg-ember"}`} />
       {agent.portraitUrl ? (
         <img src={agent.portraitUrl} alt="" className="mb-3 aspect-[4/5] w-full rounded-lg object-cover outline outline-1 -outline-offset-1 outline-fg/10" />
@@ -428,10 +486,15 @@ function wait(ms: number, signal: AbortSignal) {
   });
 }
 
-function clock(started: string | null, ended: string | null, now: number | null): string {
-  if (!started || now == null) return "00:00";
-  const end = ended ? new Date(ended).getTime() : now;
-  const seconds = Math.max(0, Math.floor((end - new Date(started).getTime()) / 1000));
+function activeMs(session: Session, now: number | null, running: boolean): number {
+  const ticking = running || session.status === "live" || session.status === "thinking";
+  const extra =
+    ticking && session.resumedAt && now != null ? Math.max(0, now - new Date(session.resumedAt).getTime()) : 0;
+  return session.elapsedMs + extra;
+}
+
+function formatClock(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(seconds / 60).toString().padStart(2, "0");
   const s = (seconds % 60).toString().padStart(2, "0");
   return `${m}:${s}`;

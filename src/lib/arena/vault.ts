@@ -10,12 +10,15 @@ type Vault = {
   defaultExchanges: number;
   defaultBudget: number;
   defaultSpeed: number;
+  defaultMinutes: number;
   setKey: (id: string, key: string) => void;
   removeKey: (id: string) => void;
   setElevenKey: (key: string) => void;
   setOpenaiTtsKey: (key: string) => void;
   setVoiceOn: (on: boolean) => void;
-  setDefaults: (patch: Partial<Pick<Vault, "defaultExchanges" | "defaultBudget" | "defaultSpeed">>) => void;
+  setDefaults: (
+    patch: Partial<Pick<Vault, "defaultExchanges" | "defaultBudget" | "defaultSpeed" | "defaultMinutes">>,
+  ) => void;
 };
 
 export const useVault = create<Vault>()(
@@ -28,6 +31,7 @@ export const useVault = create<Vault>()(
       defaultExchanges: 8,
       defaultBudget: 12000,
       defaultSpeed: 900,
+      defaultMinutes: 20,
       setKey: (id, key) =>
         set((s) => ({ keys: { ...s.keys, [id]: key } })),
       removeKey: (id) =>

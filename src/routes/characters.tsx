@@ -259,6 +259,20 @@ function Studio() {
                 <Button
                   disabled={busy !== null}
                   onClick={() => {
+                    setDraft({
+                      ...draft,
+                      id: crypto.randomUUID(),
+                      name: `${draft.name} copy`.slice(0, 80),
+                    });
+                    setFavorite(false);
+                    toast.success("Copy staged. Save it to put both on the floor.");
+                  }}
+                >
+                  Duplicate
+                </Button>
+                <Button
+                  disabled={busy !== null}
+                  onClick={() => {
                     setFavorite((v) => !v);
                   }}
                 >

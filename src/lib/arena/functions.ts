@@ -6,6 +6,7 @@ import type {
   ProviderDraft,
   ProviderKind,
   SessionStatus,
+  SetupDraft,
   StageDesign,
 } from "./types";
 
@@ -167,9 +168,9 @@ export const clearMemoriesFn = createServerFn({ method: "POST" })
   });
 
 export const getSetupData = createServerFn({ method: "GET" }).handler(async () => {
-  const { listCharacters, listProviders } = await import("./store.server");
-  const [characters, providers] = await Promise.all([listCharacters(), listProviders()]);
-  return { characters, providers };
+  const { listCharacters, listProviders, listSetups } = await import("./store.server");
+  const [characters, providers, setups] = await Promise.all([listCharacters(), listProviders(), listSetups()]);
+  return { characters, providers, setups };
 });
 
 export const createSessionFn = createServerFn({ method: "POST" })
@@ -246,3 +247,49 @@ export const distillFn = createServerFn({ method: "POST" })
 export const houseStatusFn = createServerFn({ method: "GET" }).handler(async () => {
   return { available: Boolean(process.env.XAI_API_KEY) };
 });
+
+export const getBoardFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { listBoard } = await import("./store.server");
+  return listBoard();
+});
+
+export const rematchFn = createServerFn({ method: "POST" })
+  .validator((input: { id: string }) => input)
+  .handler(async ({ data }) => {
+    const { rematchSession } = await import("./store.server");
+    return rematchSession(data.id);
+  });
+
+export const saveSetupFn = createServerFn({ method: "POST" })
+  .validator((input: SetupDraft) => {
+    if (!input?.name?.trim()) throw new Error("Name the card before saving it.");
+    return input;
+  })
+  .handler(async ({ data }) => {
+    const { saveSetup } = await import("./store.server");
+    return saveSetup(data);
+  });
+
+export const deleteSetupFn = createServerFn({ method: "POST" })
+  .validator((input: { id: string }) => input)
+  .handler(async ({ data }) => {
+    const { deleteSetup } = await import("./store.server");
+    await deleteSetup(data.id);
+    return { ok: true as const };
+  });
+
+export const getCompareFn = createServerFn({ method: "POST" })
+  .validator((input: { a?: string; b?: string }) => input ?? {})
+  .handler(async ({ data }) => {
+    const { getMessages, getSession, listSessions } = await import("./store.server");
+    const sessions = await listSessions();
+    async function pack(id?: string) {
+      if (!id) return null;
+      const session = await getSession(id);
+      if (!session) return null;
+      const messages = await getMessages(id);
+      return { session, messages };
+    }
+    const [left, right] = await Promise.all([pack(data.a), pack(data.b)]);
+    return { sessions, left, right };
+  });

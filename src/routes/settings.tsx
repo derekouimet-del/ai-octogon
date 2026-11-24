@@ -60,7 +60,7 @@ function SettingsPage() {
           />
         </Field>
       </Panel>
-      <Panel className="grid gap-4 p-5 sm:grid-cols-3">
+      <Panel className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Default exchanges">
           <TextInput
             type="number"
@@ -88,13 +88,22 @@ function SettingsPage() {
             onChange={(e) => vault.setDefaults({ defaultSpeed: Number(e.target.value) })}
           />
         </Field>
+        <Field label="Default clock (minutes)">
+          <TextInput
+            type="number"
+            min={0}
+            max={180}
+            value={hydrated ? vault.defaultMinutes : 20}
+            onChange={(e) => vault.setDefaults({ defaultMinutes: Number(e.target.value) })}
+          />
+        </Field>
       </Panel>
       <Panel className="space-y-2 p-5 text-sm text-muted">
         <h2 className="font-display text-2xl font-bold text-fg">How a floor runs</h2>
         <p>Turns alternate. Each call is one model, with its own endpoint, temperature, and instructions.</p>
         <p>Replies stream onto the floor as they are generated. Pause, end, or inject a director's note at any time.</p>
         <p>A local model has to be reachable at a public URL. The arena cannot see a server that only exists on your desk.</p>
-        <p>House replies are capped so a long session does not burn the director's budget in one sitting.</p>
+        <p>A clock, if you set one, counts only while the floor is live. Pause freezes it. Zero minutes means no clock.</p>
       </Panel>
     </div>
   );

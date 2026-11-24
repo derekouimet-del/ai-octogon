@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Brain,
   Cpu,
+  Eye,
   LayoutDashboard,
   Library,
   Settings,
@@ -16,6 +17,7 @@ const NAV = [
   { to: "/providers", label: "Models", icon: Cpu },
   { to: "/characters", label: "Cast", icon: Users },
   { to: "/setup", label: "Stage", icon: Swords },
+  { to: "/board", label: "Board", icon: Eye },
   { to: "/memory", label: "Memory", icon: Brain },
   { to: "/library", label: "Library", icon: Library },
   { to: "/settings", label: "Settings", icon: Settings },

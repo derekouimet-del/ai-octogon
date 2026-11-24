@@ -1,7 +1,7 @@
 import { safeError } from "@/lib/utils";
 import { streamChat, type LlmCall } from "./llm.server";
 import { personaPrompt, turnUserPrompt } from "./prompts";
-import { addMessage, claimTurn, commitTurn, getMessages, memoriesFor, releaseTurn } from "./store.server";
+import { addMessage, claimTurn, clockMs, closeForClock, commitTurn, getMessages, memoriesFor, releaseTurn } from "./store.server";
 import type { TurnResult } from "./types";
 
 export type TurnRequest = {
@@ -23,6 +23,10 @@ export async function executeTurn(
     return { stop: true, reason: "not-live", message: null, session: null };
   }
   const side: "a" | "b" = session.exchangeCount % 2 === 0 ? "a" : "b";
+  if (session.maxMinutes > 0 && clockMs(session) >= session.maxMinutes * 60_000) {
+    const closed = await closeForClock(session.id);
+    return { stop: true, reason: "clock", message: closed.message, session: closed.session };
+  }
   onSpeaker?.(side);
   const agent = side === "a" ? session.agentA : session.agentB;
   const other = side === "a" ? session.agentB : session.agentA;
